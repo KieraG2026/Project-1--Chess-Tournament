@@ -1,0 +1,8 @@
+---
+title: "Project 1- DATA 607"
+author: "Kiera Griffiths, Desiree Thomas"
+format: html
+editor: source
+---
+
+## Approach: For this project we will read in the source file, which is formatted as a ASCII table, then use string manipulation to remove the delimiters and dashed-line row separators. We will rely on the stringr package and functions for score calculations and ratings, omitting games that weren't played (like "Bye" rounds). We will also disregard the portion of player ratings that include 'P' and the numbers following it. We will extract the Name, State, Total Points, and Pre-Rating into a temporary table, calculate the average using the averaging function, then export the final file using write.csv(). We will attempt to use functions to make our code DRY.
