@@ -28,16 +28,55 @@ colnames(chess_tib)
 #use the 'value' column to use the str_detect inside of dplyr to find the characters that are not dashes
 clean_chesstib <- chess_tib %>%
   filter(!str_detect(value, "---")) %>%
-  slice(-c(1,2))
+  slice(-c(1,2)) #Headers are removed and when testing with head(clean_chesstib, 1) GARY HUA shows up 
+
+#new columns 
+new_columns <- clean_chesstib %>%
+  mutate(type = row_number() %% 2)
   
+#Tables for the players and their ratings 
+  #name and points for players 
+  # state and pre-rating for players 
+# modulus/modulo %% in R
+#rows are labeled 
 
+player_info <- new_columns %>%
+  filter(type == 1)
 
+rating_info <- new_columns %>% 
+  filter(type == 0)
 ```
 
 ```{r}
-#use the 'value column to use the str_detect inside of dplyr to find the characters that are not dashes
-clean_chesstib <- chess_tib %>%
-  filter(!str_detect(value, "---"))
+# 1. Extract Name and Total Points from player_info
+player_data <- player_info %>%
+  mutate(
+    # Using str_match to return capture groups (Name is in column 2)
+    name = str_trim(str_match(value, "\\|\\s*([A-Z\\s-]+?)\\s*\\|")[,2]),
+    
+    # Extract total points
+    total_points = as.numeric(str_match(value, "\\|([0-9.]+)\\s*\\|")[,2])
+  )
+
+# 2. Extract State and Pre-Rating from rating_info
+rating_data <- rating_info %>%
+  mutate(
+    # Extract 2-letter state at the start
+    state = str_extract(value, "[A-Z]{2}"),
+    
+    # FIX: Extract "R: [digits]", then pull just the digits to bypass look-behind limits
+    pre_rating = str_extract(value, "R:\\s*\\d+") %>% 
+                 str_extract("\\d+") %>% 
+                 as.numeric()
+  )
+
+# 3. Extract Opponent IDs (for later averaging)
+player_data <- player_data %>%
+  mutate(
+    opponent_ids = str_extract_all(value, "(?<=W|L|D)\\s+\\d+") %>% 
+                   map(~ as.numeric(str_trim(.x)))
+  )
+
 ```
 ```
 
