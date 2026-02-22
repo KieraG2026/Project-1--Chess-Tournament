@@ -5,4 +5,45 @@ format: html
 editor: source
 ---
 
-## Approach: For this project we will read in the source file, which is formatted as a ASCII table, then use string manipulation to remove the delimiters and dashed-line row separators. We will rely on the stringr package and functions for score calculations and ratings, omitting games that weren't played (like "Bye" rounds). We will also disregard the portion of player ratings that include 'P' and the numbers following it. We will extract the Name, State, Total Points, and Pre-Rating into a temporary table, calculate the average using the averaging function, then export the final file using write.csv(). We will attempt to use functions to make our code DRY.
+## Approach: 
+
+For this project we will read in the source file, which is formatted as a ASCII table, then use string manipulation to remove the delimiters and dashed-line row separators. We will rely on the stringr package and functions for score calculations and ratings, omitting games that weren't played (like "Bye" rounds). We will also disregard the portion of player ratings that include 'P' and the numbers following it. We will extract the Name, State, Total Points, and Pre-Rating into a temporary table, calculate the average using the averaging function, then export the final file using write.csv(). We will attempt to use functions to make our code DRY.
+
+#Load in the data and libraries
+```{r}
+library(tidyverse)
+library(readr)
+library(stringr)
+library(dplyr)
+
+#chose readLines because it is used for unstructured free flowing text
+chess_text <- readLines("https://raw.githubusercontent.com/KieraG2026/Project-1--Chess-Tournament/refs/heads/main/chess_results.txt")
+
+as_tibble(chess_text)
+
+chess_tib <- as_tibble(chess_text) #puts the tibble in a format where it can have column names, returns 'value' 
+print(chess_tib)
+colnames(chess_tib)
+
+#use the 'value' column to use the str_detect inside of dplyr to find the characters that are not dashes
+clean_chesstib <- chess_tib %>%
+  filter(!str_detect(value, "---")) %>%
+  slice(-c(1,2))
+  
+
+
+```
+
+```{r}
+#use the 'value column to use the str_detect inside of dplyr to find the characters that are not dashes
+clean_chesstib <- chess_tib %>%
+  filter(!str_detect(value, "---"))
+```
+```
+
+
+
+#Goals of the Assignment
+```{r}
+#Create a R Markdown file that generates a CSV file 
+#CSV file should be able to be imported into a SQL database 
