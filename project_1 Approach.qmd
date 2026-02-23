@@ -5,4 +5,227 @@ format: html
 editor: source
 ---
 
-## Approach: For this project we will read in the source file, which is formatted as a ASCII table, then use string manipulation to remove the delimiters and dashed-line row separators. We will rely on the stringr package and functions for score calculations and ratings, omitting games that weren't played (like "Bye" rounds). We will also disregard the portion of player ratings that include 'P' and the numbers following it. We will extract the Name, State, Total Points, and Pre-Rating into a temporary table, calculate the average using the averaging function, then export the final file using write.csv(). We will attempt to use functions to make our code DRY.
+## Approach:
+
+For this project we will read in the source file, which is formatted as a ASCII table, then use string manipulation to remove the delimiters and dashed-line row separators. We will rely on the stringr package and functions for score calculations and ratings, omitting games that weren't played (like "Bye" rounds). We will also disregard the portion of player ratings that include 'P' and the numbers following it. We will extract the Name, State, Total Points, and Pre-Rating into a temporary table, calculate the average using the averaging function, then export the final file using write.csv(). We will attempt to use functions to make our code DRY.
+
+#Background
+
+The unstructured document was provided to us by our professor. Our goal was to be able to extract the data and create calculations to determine the average rating. The sport is this instance is chess.
+
+#Codebase
+
+#Reverse Engineer This was a difficult project that other classmates also relayed as involving many steps. To ease our nerves, I 'reverse-engineered' the problem we were trying to solve and our goals.
+
+1.  What we needed: We needed a clean table that had five columns like Name, State, Points, etc and a new column for the Average Ratings we had to calculate.
+
+-   to get the average of one player, we needed the numbers from the other players/opponents -this is essentially a lookup table! -tables mean joins and other things
+
+2.  if you need a lookup, then it makes the overall problem a relational one. -When you think of relational, it brings to mind the word database -If you assign player ids then you can also use a player id for their opponents. Foreign keys and primary keys. Kind of like gradebooks or emplids (the concept).
+
+3.  How to read the data? Horizontally? Vertically? Diagonally?
+
+4.  How to extract from this entire mess? What information is the most important to get out and use?
+
+#Explanation of code Overall for this codebase, we used Readlines to instead of other libraries such as Readr. We used pair_id with %% (similiar to JavaScript and Python) to identify which rows were going to be classified as a Name Row or Rating Row. We decided to create two different tables, one for the Player and one for the Ratings. Left Joins helped us to use the id's to look up their rating and calculate their average score.
+
+We manually calculated the averages to text against in an excel sheet which is included in our repo.
+
+For the visualization, Gemini generated the code for the table for us and heavily corrected the code we initially had for the Regex along with guidance. Gemini also did a code-review (for dryness and robustness and suggested changes which were implemented once we understood them).
+
+Gemini's citation is towards the end of the codebase.
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(DT)
+
+
+# Load raw data
+chess_text <- readLines("https://raw.githubusercontent.com/KieraG2026/Project-1--Chess-Tournament/refs/heads/main/chess_results.txt")
+
+# Removing dashed lines and headers that we don't need
+clean_chesstib <- as_tibble(chess_text) %>%
+  filter(!str_detect(value, "---")) %>%
+  slice(-c(1, 2))
+
+# Create a 'pair_id' to glue the two-line player records together
+indexed_tibble <- clean_chesstib %>%
+  mutate(
+    pair_id = rep(1:(n()/2), each = 2),
+    type = row_number() %% 2  # 1 for player name row, 0 for rating row 
+  )
+
+# Split into two tables
+player_info <- indexed_tibble %>% filter(type == 1)
+rating_info <- indexed_tibble %>% filter(type == 0)
+```
+
+```{r}
+# Extract player details
+player_data <- player_info %>%
+  mutate(
+    name = str_trim(str_match(value, "\\|\\s*([A-Z\\s-]+?)\\s*\\|")[,2]),
+    total_points = as.numeric(str_match(value, "\\|([0-9.]+)\\s*\\|")[,2]),
+    opponent_ids = str_extract_all(value, "(?<=W|L|D)\\s+\\d+") %>% 
+                   map(~ as.numeric(str_trim(.x))) # [cite: 10, 12]
+  )
+
+# Extract ratings
+rating_data <- rating_info %>%
+  mutate(
+    state = str_extract(value, "[A-Z]{2}"), # [cite: 9]
+    pre_rating = str_extract(value, "R:\\s*\\d+") %>% 
+                 str_extract("\\d+") %>% 
+                 as.numeric() # [cite: 9, 13]
+  )
+
+ #Calculate average opponent ratings
+player_averages <- player_data %>% 
+  select(pair_id, opponent_ids) %>% 
+  unnest(opponent_ids) %>%
+  left_join(rating_data, by = c("opponent_ids" = "pair_id")) %>%
+  group_by(pair_id) %>%
+  summarize(avg_opponent_rating = round(mean(pre_rating, na.rm = TRUE)))
+
+```
+
+```{r}
+
+
+
+final_chess_table <- player_data %>%
+  # Keep only the columns we need for the join and final table
+  select(pair_id, name, total_points, opponent_ids) %>% 
+  left_join(
+    rating_data %>% select(pair_id, state, pre_rating), 
+    by = "pair_id"
+  ) %>%
+  left_join(player_averages, by = "pair_id") %>%
+  select(
+    `Player Name` = name, 
+    State = state, 
+    `Total Points` = total_points, 
+    `Pre-Tournament Rating` = pre_rating, 
+    `Avg Opponent Rating` = avg_opponent_rating
+  )
+
+# Check the output
+datatable(final_chess_table)
+  
+
+#Interactive Table
+datatable(final_chess_table, caption = "Chess Tournament Results: Player Performance Overview")
+
+
+```
+
+```{r}
+# Export to CSV; you can find this in your Files Pane in RStudio. It should export there. 
+write.csv(final_chess_table, "tournament_results_final.csv", row.names = FALSE)
+```
+# Citation
+
+
+User: I forgot to save the changes I had made before I attached it for you. Here is what I actually have
+Gemini: Let's get back into the project_1 Approach.qmd code and verify those specific rows for Gary Hua, Gary Brown, and Bruce Lin.Based on the logic in your script—specifically where you use row_number() to create player_id and str_extract to pull the pre_rating —here is how the math checks out for your verification.+1Calculation Verification TablePlayerIDPre-RatingOpponent IDsOpponent RatingsMean (Rounded)Gary Hua1179439, 21, 18, 14, 7, 12, 41436, 1563, 1600, 1610, 1649, 1663, 17161605Gary Brown54110211, 35, 27, 251153, 1140, 1252, 11571176Bruce Lin30156445, 23, 12, 2, 251554, 1629, 1663, 1553, 11571511Critical Analysis of Your Current LogicSince you want honest, critical feedback to ensure you actually learn, there is a subtle but dangerous "Gotcha" in your current code structure that could break your calculations:1. The row_number() RiskYou are creating player_id using row_number() on player_data and rating_data separately.The Good: This works only if the rows in player_info and rating_info stayed perfectly aligned after your mutate(type = row_number() %% 2) step.The Critical Feedback: If you accidentally sort one table or filter out a row (like a "Bye" or a missing value) before assigning the ID, your "Primary Key" will no longer point to the correct player. In professional data science, we usually extract the actual ID from the text (e.g., the number 1 next to Gary Hua) rather than relying on row position.2. The Join SuccessYour updated code uses:left_join(rating_data, by = c("opponent_ids" = "player_id")) This is a much better approach than the previous version! By using the unnest(opponent_ids) function, you've successfully moved into a "Long Format". This makes the calculation of the mean(pre_rating) straightforward and accurate for the three players we just verified.Next Step for your "DRY" GoalYou mentioned wanting to make the code DRY (Don't Repeat Yourself). Right now, you are manually repeating the extraction for player_data and rating_data.Would you like me to show you how to wrap the extraction logic into a single function so you can process the whole table in one go without creating multiple temporary tables?
+
+---------------------
+User: is there a way to counteract the row_number()? How would you change it?
+
+Gemini: The short answer: Yes, and you should. Relying on row_number() is "brittle"—if the source text has a missing line or an extra break, your IDs will shift, and suddenly Gary's opponents belong to Bruce. +1
+
+In your code, you already have the tools to extract the actual ID from the text itself. This turns a "position-based" ID into a "data-based" ID, which is much more robust.
+
+The Recommended Change Instead of generating a sequence, you can pull the number that sits right at the beginning of the "Player" row.
+
+1.  Extract the ID from the text In your player_data mutation, add a line to grab the leading digits.
+
+R player_data \<- player_info %\>% mutate( \# Extract the ID at the very start of the string (before the first '\|') player_id = as.numeric(str_extract(value, "\^\\s\*\\d+")),
+
+```         
+name = str_trim(str_match(value, "\\|\\s*([A-Z\\s-]+?)\\s*\\|")[,2]),
+total_points = as.numeric(str_match(value, "\\|([0-9.]+)\\s*\\|")[,2])
+```
+
+) 2. Link the Rating to that ID Since your rating_info rows always follow your player_info rows, the safest way to link them is to assign the ID before you split the table. If you assign the ID to the "Pair" of rows, they stay glued together regardless of filtering.
+
+How I would refactor your workflow To keep it DRY and avoid the row_number() trap, I’d suggest "indexing" the rows while they are still in one big tibble. +1
+
+R \# 1. Create a "Pair ID" before filtering. \# Every two lines of data belong to one player. indexed_tibble \<- clean_chesstib %\>% mutate(pair_id = rep(1:(n()/2), each = 2))
+
+# 2. Now when you split, both tables have the SAME pair_id
+
+player_data \<- indexed_tibble %\>% filter(row_number() %% 2 == 1) rating_data \<- indexed_tibble %\>% filter(row_number() %% 2 == 0)
+
+# 3. Use that pair_id as your join key
+
+opponents_with_ratings \<- opponents_table %\>% left_join(rating_data, by = c("opponent_ids" = "pair_id")) Why this is the "Professional" method: Traceability: If you look at the chess_results.txt file, Gary Hua is explicitly labeled as 1. By extracting that 1, your data reflects the source truth.
+
+Order Agnostic: You could shuffle the rows of player_data now, and the join would still work perfectly because the ID is an attribute of the player, not their position in the list.
+
+A Quick Meta-Discussion I noticed you’re using rep(1:(n()/2), each = 2). This is a very common Data Science pattern for "cleaning messy headers" or "merging multi-line records". It’s much more reliable than row_number() because it explicitly defines the relationship between line 1 and line 2. +1
+
+Would you like me to help you rewrite the mutate block to incorporate this "Pair ID" logic so you can delete those separate row_number() lines?
+
+User: Let's eliminate the 2-4 hours. Generate the code for the regex part with clear explanations and a provided walkthrough.
+
+Gemini said I'll be blunt: jumping straight to the code eliminates the "muck" where the actual learning happens, but if you want to see the "professional" way to handle this, we can skip the trial-and-error.
+
+The trick to this project isn't one giant, complex Regex. It’s layered extraction. The raw data is essentially a "record" split across two lines. We need to treat them as a single unit to get everything we need.
+
+The Strategy: Two-Line Record Mapping In the tournament file, a single player's data looks like this:
+
+Plaintext 1 \| GARY HUA \|6.0 \|W 3\|W 11\|W 12\|D 2\|D 3\|W 14\|W 7\| ON \| 15445895 / R: 1794 -\>1817 \|N:2 \|W \|B \|W \|B \|W \|B \|W \| We need to extract the Name, State, Total Points, Pre-Rating, and Opponent IDs.
+
+The Regex Breakdown To do this efficiently in R, we use stringr. Here are the three primary patterns you'll need:
+
+The Name & Points (Line 1): \^\\s*\\d+\\s*\\\|\\s*(\[A-Z- \]+?)\\s*\\\|(\[0-9.\]+)\\s\*\\\|
+
+\^\\s\*\\d+: Finds the player number at the start.
+
+(\[A-Z- \]+?): Captures the Name (letters and spaces).
+
+(\[0-9.\]+): Captures the Total Points.
+
+The State & Pre-Rating (Line 2): \^\\s*(\[A-Z\]{2})\\s*\\\|\\s*\\d+\\s*/\\s*R:\\s*(\\d{3,4})
+
+(\[A-Z\]{2}): Captures the 2-letter State (e.g., "ON").
+
+R:\\s\*(\\d{3,4}): Captures the 3-4 digit Pre-Rating following "R:".
+
+The Opponent IDs (Line 1 suffix): (W\|L\|D)\\s+(\\d+)
+
+This looks for the win/loss/draw indicator followed by the player ID (e.g., W 3).
+
+The Implementation Since you prefer the integrated terminal, you'll want to run this in a script (e.g., process_chess.R). This code assumes you've read the file into a character vector called raw_data.
+
+R library(tidyverse) library(stringr)
+
+# 1. Clean the noise (remove the dashed separator lines)
+
+clean_data \<- raw_data\[!str_detect(raw_data, "\^-+\$")\]
+
+# 2. Extract Line 1 info (Odd rows: 1, 3, 5...)
+
+line1 \<- clean_data\[seq(1, length(clean_data), by = 2)\] names_points \<- str_match(line1, "\^\\s*\\d+\\s*\\\|\\s*(\[A-Z\\s-\]+?)\\s*\\\|(\[0-9.\]+)")
+
+# 3. Extract Line 2 info (Even rows: 2, 4, 6...)
+
+line2 \<- clean_data\[seq(2, length(clean_data), by = 2)\] state_ratings \<- str_match(line2, "\^\\s*(\[A-Z\]{2})\\s*\\\|\\s*\\d+\\s*/\\s*R:\\s*(\\d{3,4})")
+
+# 4. Extract Opponent IDs (The tricky part)
+
+# We look at line 1 again and extract all digits that follow a W, L, or D
+
+opponents \<- str_extract_all(line1, "(?\<=W\|L\|D)\\s+\\d+") %\>% map(\~ as.numeric(str_trim(.x)))
+
+# Combine into a clean Tibble
+
+chess_df \<- tibble( name = str_trim(names_points\[,2\]), state = state_ratings\[,2\], total_points = as.numeric(names_points\[,3\]), pre_rating = as.numeric(state_ratings\[,3\]), opponent_ids = opponents ) Walkthrough of the Process Step 1: Row Sequencing. Because the data is "multiline," we use seq(by = 2) to separate the "Name" lines from the "Rating" lines. This is much cleaner than trying to write one Regex that spans two lines.
+
+Step 2: str_match. Unlike str_extract, str_match returns a matrix where the first column is the whole match and subsequent columns are your capture groups (the stuff in parentheses). This allows us to grab the Name and Points in one go.
+
+Step 3: str_extract_all. Each player has 7 rounds. We use a Lookbehind (?\<=W\|L\|D) to find digits that are preceded by a result code. This creates a "list-column" in your dataframe, which is the "Data Scientist" way to handle one-to-many relationships.
+
+Google DeepMind. (2026). Gemini Pro 3 Thinking \[Large language model\]. https://gemini.google.com. Accessed February 21st & 22nd, 2026.
